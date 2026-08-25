@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adverse-event-ctcae-v5-triage"
+version = "2.0.0"
+description = "CTCAE-Triager: NCI Common Terminology Criteria for Adverse Events v5"
+readme = "README.md"
+authors = [{ name = "Dr. Abu Suraih Sakhri", email = "abusuraih@example.com" }]
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Security/Cryptography",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+adverse-event-ctcae-v5-triage = "ctcae_triager.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/abusuraihsakhri/adverse-event-ctcae-v5-triage"
+Repository = "https://github.com/abusuraihsakhri/adverse-event-ctcae-v5-triage.git"
