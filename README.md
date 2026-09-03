@@ -1,101 +1,119 @@
-# Adverse Event CTCAE v5 Triage
+# CTCAE v5.0 Adverse Event Triage & Dose-Limiting Toxicity (DLT) Engine
 
-> **Domain:** Cardiovascular Medicine & Hemodynamic Analytics  
-> **Reference Guidelines & Standards:** `AHA/ACC Practice Guidelines & ESC Clinical Standards`
+A Python clinical oncology safety evaluation library and CLI tool implementing the National Cancer Institute (NCI) Common Terminology Criteria for Adverse Events (CTCAE) version 5.0, protocol-defined Dose-Limiting Toxicity (DLT) rules for Phase I/II oncology trials, Hy's Law drug-induced liver injury (DILI) screening, and ASCO/NCCN immune-related adverse event (irAE) corticosteroid triage.
 
-<div align="center">
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
-![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
-![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
-
-</div>
+Requires Python standard library only (zero external runtime dependencies).
 
 ---
 
-## 📖 What It Does
+## Features
 
-CTCAE v5.0 Engine - Re-exports from ctcae_triager
+- **NCI CTCAE v5.0 Numerical & Symptom Grading:**
+  - **Hematologic Toxicity:** Absolute Neutrophil Count (ANC / neutropenia), Platelets (thrombocytopenia), Hemoglobin (anemia).
+  - **Hepatic & Metabolic:** ALT, AST, Total Bilirubin, Alkaline Phosphatase.
+  - **Renal & Electrolytes:** Serum Creatinine, AKI stages, baseline ratio shifts.
+  - **Cardiac Safety:** Fridericia/Bazett corrected QTc interval prolongation ($\ge 501\text{ ms}$, $\Delta \ge 60\text{ ms}$).
+  - **Clinical Symptoms:** Gastrointestinal (diarrhea, colitis, nausea, vomiting), neurological, dermatological, and pulmonary toxicities.
+- **Phase I/II Dose-Limiting Toxicity (DLT) Criteria:**
+  - Grade 4 persistent neutropenia ($\ge 5\text{ days}$).
+  - Febrile neutropenia (ANC $< 1000/\text{mm}^3$ + fever $\ge 38.0^\circ\text{C}$).
+  - Grade 4 thrombocytopenia or Grade 3 with clinically significant bleeding.
+  - Grade $\ge 3$ non-hematologic toxicities (excluding protocol exceptions).
+  - Treatment delays $> 14\text{ days}$ due to unresolved drug-related toxicity.
+  - Grade 5 fatalities.
+- **Hy's Law Hepatotoxicity Screening:**
+  - Transaminases (ALT or AST) $\ge 3\times\text{ULN}$ + Total Bilirubin $\ge 2\times\text{ULN}$ with Alkaline Phosphatase $< 2\times\text{ULN}$.
+- **Immune-Related AE (irAE) Triage:**
+  - ASCO/NCCN guideline-directed corticosteroid initiation (0.5–1.0 mg/kg vs. 1.0–2.0 mg/kg prednisone equivalent) and taper schedules.
+- **Actionable Dose Modifications:** Guidance for dose holds, level -1 (-25%), level -2 (-50%) dose reductions, and permanent discontinuations.
+- **Batch CSV Processing:** High-throughput safety cohort triage and surveillance.
 
 ---
 
-## ⚙️ Key Capabilities & Algorithmic Modules
+## Installation & Requirements
 
-- **Deterministic Calculation Engine**: Strict compliance with standard reference formulations and thresholds.
-- **Risk & Urgency Classification**: Multi-tier categorization with automated clinical/operational action recommendations.
-- **Validation & Guardrails**: Rigorous input bounds checking and anomaly detection.
+- Python 3.10+ (tested on 3.10, 3.11, 3.12)
+- Zero external runtime dependencies. `pytest` is optional for running tests.
 
----
-
-## 💻 CLI Quickstart & Usage
-
-### 1. Guided Interactive Mode
 ```bash
-python cli.py
+git clone https://github.com/abusuraihsakhri/adverse-event-ctcae-v5-triage.git
+cd adverse-event-ctcae-v5-triage
 ```
 
-### 2. Direct Parameterized Evaluation
+---
+
+## CLI Usage
+
+### 1. Evaluate Single Adverse Event
+Evaluate laboratory finding:
 ```bash
-python cli.py --interactive <value> --demo <value> --json <value> --term <value>
+python cli.py evaluate --term Neutropenia --lab-value 450
+```
+Output as JSON:
+```bash
+python cli.py evaluate --term Neutropenia --lab-value 450 --json
 ```
 
-### Parameter Reference
-- `--interactive`: Specifies input measurement or parameter value.
-- `--demo`: Specifies input measurement or parameter value.
-- `--json`: Specifies input measurement or parameter value.
-- `--term`: Specifies input measurement or parameter value.
-- `--lab-value`: Specifies input measurement or parameter value.
-- `--baseline`: Specifies input measurement or parameter value.
-- `--symptoms`: Specifies input measurement or parameter value.
-- `--duration`: Specifies input measurement or parameter value.
-- `--temp`: Specifies input measurement or parameter value.
-- `--bleeding`: Specifies input measurement or parameter value.
+Evaluate symptom with clinical descriptors:
+```bash
+python cli.py evaluate --term Colitis --symptoms ">=7 stools per day severe pain" --duration 4 --immune-mediated
+```
 
-### Input Data Schema
+### 2. Triage Complete Patient Encounter
+```bash
+python cli.py triage --patient-id PT-101 --cycle 1 --alt 240 --ast 195 --bili 3.2 --alk 110 --json
+```
 
-| Field | Description | Requirement |
-|:------|:------------|:------------|
-| `task_id` | Parameter / observation metric | Required |
-| `target_identifier` | Parameter / observation metric | Required |
-| `primary_metric` | Parameter / observation metric | Required |
-| `secondary_metric` | Parameter / observation metric | Required |
-| `is_critical_flag` | Parameter / observation metric | Required |
-| `status_descriptor` | Parameter / observation metric | Required |
+### 3. Run Benchmark Clinical Vignettes
+```bash
+python cli.py --demo
+```
+
+### 4. Batch CSV Triage
+```bash
+python cli.py batch --input sample.csv --output results.csv
+```
 
 ---
 
-## 🛡️ Security & Enterprise Architecture
+## Python API Quickstart
 
-* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
-* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
-* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
-* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
+```python
+from ctcae_triager import AdverseEventInput, CTCAETriageEngine
+
+# 1. Evaluate individual clinical event
+event = AdverseEventInput(
+    term="Neutropenia",
+    system_organ_class="Blood and lymphatic system disorders",
+    lab_value=450.0,
+    duration_days=6,
+)
+graded = CTCAETriageEngine.evaluate_single_event(event)
+print(f"Grade: {graded.grade_name} | DLT: {graded.is_dlt} | Action: {graded.action_triage}")
+
+# 2. Triage patient encounter with hepatic labs
+report = CTCAETriageEngine.triage_patient_encounter(
+    patient_id="PT-901",
+    events=[event],
+    cycle_number=1,
+    alt=180.0,
+    total_bilirubin=2.8,
+    alk_phosphatase=95.0,
+)
+print(f"DLT Status: {report.dlt_assessment.is_dlt}")
+print(f"Hy's Law Met: {report.hys_law.meets_hys_law if report.hys_law else False}")
+print(f"Action: {report.recommended_action}")
+```
 
 ---
 
-## 🧪 Testing & Verification
+## Running Tests
 
-Run the automated test suite:
+Run the test suite using standard `unittest` or `pytest`:
 
 ```bash
+python test_ctcae_triager.py
+# or
 pytest -v
 ```
 
-Execute high-throughput batch simulation benchmarks:
-
-```bash
-python simulator.py --tasks 1000 --concurrency 8
-```
-
----
-
-## 🐳 Container Deployment
-
-```bash
-docker build -t adverse-event-ctcae-v5-triage .
-docker run -p 8000:8000 adverse-event-ctcae-v5-triage
-```

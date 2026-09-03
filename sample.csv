@@ -1,4 +1,4 @@
-task_id,target_identifier,primary_metric,secondary_metric,is_critical_flag,status_descriptor
-TASK-001,TARGET-01,28.4,14.2,True,DISCORDANT
-TASK-002,TARGET-02,12.0,4.1,False,NOMINAL
-TASK-003,TARGET-03,35.0,19.5,True,ANOMALY
+patient_id,term,system_organ_class,lab_value,symptoms,duration_days,is_immune_mediated
+PT-001,Neutropenia,Blood and lymphatic system disorders,450,,6,false
+PT-002,Alanine aminotransferase increased,Hepatobiliary disorders,220,,3,false
+PT-003,Colitis,Gastrointestinal disorders,,>=7 stools per day with severe abdominal pain,4,true

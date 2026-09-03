@@ -12,6 +12,7 @@ import argparse
 import csv
 import json
 import sys
+from dataclasses import asdict
 from typing import List, Optional
 
 from ctcae_triager import (
@@ -218,6 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
     ev_p.add_argument("--temp", type=float, default=None, help="Body temperature in Celsius")
     ev_p.add_argument("--bleeding", action="store_true", help="Associated with bleeding")
     ev_p.add_argument("--immune-mediated", action="store_true", help="Is immune-related AE (irAE)")
+    ev_p.add_argument("--json", action="store_true", help="Output results in JSON")
 
     # Triage patient
     pt_p = sub.add_parser("triage", help="Triage complete patient encounter JSON")
@@ -228,6 +230,7 @@ def build_parser() -> argparse.ArgumentParser:
     pt_p.add_argument("--ast", type=float, default=None, help="AST (U/L)")
     pt_p.add_argument("--bili", type=float, default=None, help="Total Bilirubin (mg/dL)")
     pt_p.add_argument("--alk", type=float, default=None, help="Alkaline Phosphatase (U/L)")
+    pt_p.add_argument("--json", action="store_true", help="Output results in JSON")
 
     # Batch CSV
     b_p = sub.add_parser("batch", help="Process adverse events CSV cohort")
