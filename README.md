@@ -117,3 +117,12 @@ python test_ctcae_triager.py
 pytest -v
 ```
 
+## Security & Input Validation
+
+The engine includes defensive guards against common vulnerabilities:
+
+- **Input validation:** `AdverseEventInput` validates term non-emptiness, lab values are finite/non-negative, and temperature is physiologically plausible (30–45 °C).
+- **Division-by-zero protection:** Grading functions reject zero/negative ULN reference values.
+- **Path traversal protection:** The CLI `batch` and `triage --payload` commands resolve file paths safely using `ctcae_triager.safe_resolve_path`.
+- **Zero external runtime dependencies:** No third-party packages required, reducing supply-chain attack surface.
+

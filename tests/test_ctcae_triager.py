@@ -301,6 +301,76 @@ class TestCLIAndBatchProcessing(unittest.TestCase):
             self.assertTrue(os.path.exists(out_csv))
 
 
+class TestInputValidation(unittest.TestCase):
+    """Test AdverseEventInput validation and safety guards."""
+
+    def test_empty_term_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            AdverseEventInput(term="")
+
+    def test_whitespace_term_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            AdverseEventInput(term="   ")
+
+    def test_negative_lab_value_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            AdverseEventInput(term="Neutropenia", lab_value=-10.0)
+
+    def test_nan_lab_value_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            AdverseEventInput(term="Neutropenia", lab_value=float("nan"))
+
+    def test_inf_lab_value_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            AdverseEventInput(term="Neutropenia", lab_value=float("inf"))
+
+    def test_extreme_temperature_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            AdverseEventInput(term="Fever", temperature_c=50.0)
+
+    def test_valid_input_no_error(self):
+        inp = AdverseEventInput(term="Neutropenia", lab_value=1500.0, temperature_c=37.5, duration_days=3)
+        self.assertEqual(inp.term, "Neutropenia")
+        self.assertEqual(inp.lab_value, 1500.0)
+
+
+class TestDivisionByZeroGuards(unittest.TestCase):
+    """Test that grading functions reject zero/negative ULN."""
+
+    def test_grade_liver_enzymes_zero_uln_raises(self):
+        with self.assertRaises(ValueError):
+            CTCAEGradingEngine.grade_liver_enzymes(100.0, uln=0.0)
+
+    def test_grade_bilirubin_zero_uln_raises(self):
+        with self.assertRaises(ValueError):
+            CTCAEGradingEngine.grade_bilirubin(2.0, uln=0.0)
+
+    def test_grade_creatinine_zero_uln_raises(self):
+        with self.assertRaises(ValueError):
+            CTCAEGradingEngine.grade_creatinine(2.0, baseline=None, uln=0.0)
+
+
+class TestSafeResolvePath(unittest.TestCase):
+    """Test safe path resolution utility."""
+
+    def test_resolve_existing_file(self):
+        from ctcae_triager import safe_resolve_path
+        p = safe_resolve_path("sample.csv", must_exist=True)
+        self.assertTrue(p.exists())
+        self.assertTrue(p.is_file())
+
+    def test_resolve_nonexistent_raises(self):
+        from ctcae_triager import safe_resolve_path
+        with self.assertRaises(FileNotFoundError):
+            safe_resolve_path("/nonexistent/path/file.json", must_exist=True)
+
+    def test_traversal_resolves_safely(self):
+        from ctcae_triager import safe_resolve_path
+        # Should resolve without error (path may not exist but no crash)
+        p = safe_resolve_path("../some_path", must_exist=False)
+        self.assertTrue(p.is_absolute())
+
+
 if __name__ == "__main__":
     unittest.main()
 

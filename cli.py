@@ -19,6 +19,7 @@ from ctcae_triager import (
     AdverseEventInput,
     CTCAETriageEngine,
     PatientSafetyReport,
+    safe_resolve_path,
 )
 
 
@@ -284,7 +285,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.payload:
             try:
                 if args.payload.endswith(".json"):
-                    with open(args.payload, "r") as f:
+                    safe_path = safe_resolve_path(args.payload, must_exist=True)
+                    with open(safe_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                 else:
                     data = json.loads(args.payload)
@@ -314,7 +316,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.command == "batch":
         try:
-            with open(args.input, "r", newline="", encoding="utf-8-sig") as f_in:
+            safe_in = safe_resolve_path(args.input, must_exist=True)
+            safe_out = safe_resolve_path(args.output, must_exist=False)
+            with open(safe_in, "r", newline="", encoding="utf-8-sig") as f_in:
                 reader = csv.DictReader(f_in)
                 rows = list(reader)
             out_rows = []
@@ -340,7 +344,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "action_triage": graded.action_triage,
                     "management_guidance": graded.management_guidance,
                 })
-            with open(args.output, "w", newline="", encoding="utf-8") as f_out:
+            with open(safe_out, "w", newline="", encoding="utf-8") as f_out:
                 if out_rows:
                     writer = csv.DictWriter(f_out, fieldnames=list(out_rows[0].keys()))
                     writer.writeheader()

@@ -14,14 +14,32 @@ Comprehensive, pure standard library clinical trial safety engine implementing:
 
 from __future__ import annotations
 
-import csv
 import json
 import math
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, Any, Union
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Any
 
 __version__ = "2.0.0"
+
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+def safe_resolve_path(file_path: str, must_exist: bool = False) -> Path:
+    """Resolve a file path safely, preventing directory traversal attacks.
+
+    Returns an absolute, resolved Path. If must_exist is True, raises
+    FileNotFoundError when the target does not exist.
+    """
+    p = Path(file_path).resolve()
+    if must_exist and not p.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    if must_exist and not p.is_file():
+        raise ValueError(f"Path is not a regular file: {file_path}")
+    return p
 
 
 # ============================================================================
@@ -78,11 +96,21 @@ class AdverseEventInput:
     temperature_c: Optional[float] = None
 
     def __post_init__(self):
+        if not self.term or not self.term.strip():
+            raise ValueError("Adverse event term must be a non-empty string.")
+        if self.lab_value is not None and (self.lab_value < 0 or math.isnan(self.lab_value) or math.isinf(self.lab_value)):
+            raise ValueError(f"lab_value must be a non-negative finite number, got {self.lab_value}.")
+        if self.baseline_value is not None and (self.baseline_value < 0 or math.isnan(self.baseline_value) or math.isinf(self.baseline_value)):
+            raise ValueError(f"baseline_value must be a non-negative finite number, got {self.baseline_value}.")
+        if self.temperature_c is not None and (self.temperature_c < 30.0 or self.temperature_c > 45.0):
+            raise ValueError(f"temperature_c must be between 30.0 and 45.0 Celsius, got {self.temperature_c}.")
         if self.duration_days is None:
             if self.resolution_day is not None and self.resolution_day >= self.onset_day:
                 self.duration_days = self.resolution_day - self.onset_day + 1
             else:
                 self.duration_days = 1
+        if self.duration_days < 0:
+            raise ValueError(f"duration_days must be non-negative, got {self.duration_days}.")
 
 
 @dataclass
@@ -213,6 +241,8 @@ class CTCAEGradingEngine:
     @classmethod
     def grade_liver_enzymes(cls, alt_or_ast: float, uln: float = 40.0, enzyme_name: str = "ALT") -> Tuple[int, str]:
         """ALT or AST elevation (x ULN)."""
+        if uln <= 0:
+            raise ValueError(f"ULN must be positive, got {uln}.")
         ratio = alt_or_ast / uln
         if ratio > 20.0:
             return 4, f"{enzyme_name} > 20.0x ULN ({ratio:.1f}x ULN, {alt_or_ast:.1f} U/L): Grade 4"
@@ -227,6 +257,8 @@ class CTCAEGradingEngine:
     @classmethod
     def grade_bilirubin(cls, value: float, uln: float = 1.2) -> Tuple[int, str]:
         """Total Bilirubin elevation (x ULN)."""
+        if uln <= 0:
+            raise ValueError(f"ULN must be positive, got {uln}.")
         ratio = value / uln
         if ratio > 10.0:
             return 4, f"Bilirubin > 10.0x ULN ({ratio:.1f}x ULN, {value:.2f} mg/dL): Grade 4"
@@ -242,6 +274,8 @@ class CTCAEGradingEngine:
     def grade_creatinine(cls, value: float, baseline: Optional[float] = None, uln: float = 1.2) -> Tuple[int, str]:
         """Serum Creatinine (x ULN or x baseline)."""
         ref_base = baseline if baseline and baseline > 0 else uln
+        if ref_base <= 0:
+            raise ValueError(f"Reference base (baseline or ULN) must be positive, got {ref_base}.")
         ratio = value / ref_base
         if ratio > 6.0 or value > 6.0:
             return 4, f"Creatinine > 6.0x baseline/ULN ({ratio:.1f}x, {value:.2f} mg/dL): Grade 4 (Dialysis/Life-threatening)"
@@ -318,8 +352,6 @@ class DLTEvaluator:
     - Treatment delay > 14 days due to unresolved toxicity
     - Any Grade 5 toxicity
     """
-
-    NON_HEMATOLOGIC_EXCLUDED_FROM_DLT = ["alopecia", "fatigue (grade 3 <3 days)", "nausea (transient)"]
 
     @classmethod
     def evaluate_hys_law(

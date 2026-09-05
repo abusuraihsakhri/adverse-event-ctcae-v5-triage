@@ -18,3 +18,14 @@ output.json
 *.log
 .DS_Store
 Thumbs.db
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Project-specific
+out_*.csv
+out_*.json
