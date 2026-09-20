@@ -138,7 +138,7 @@ class GradedAdverseEvent:
 
 @dataclass
 class HysLawAssessment:
-    """Hy's Law DILI criteria: ALT/AST >= 3x ULN + Total Bilirubin >= 2x ULN + Alk Phos < 2x ULN."""
+    """Hy's Law laboratory screening result; clinical causality is not established here."""
     meets_hys_law: bool
     alt_ast_elevation_factor: float
     bili_elevation_factor: float
@@ -364,8 +364,10 @@ class CTCAEGradingEngine:
 
 class DLTEvaluator:
     """
-    Oncology Phase I / II Dose-Limiting Toxicity (DLT) rules engine.
-    Applies standard NCI CTEP and clinical trial protocol criteria:
+    Default Phase I/II Dose-Limiting Toxicity (DLT) screening rules.
+
+    DLT definitions are protocol-specific. The rules below are a configurable
+    starting point and must be checked against the active trial protocol:
     - Any Grade 4 hematologic toxicity lasting >= 5-7 days
     - Febrile neutropenia (ANC < 1000/mm³ + Temp > 38.3°C or >= 38.0°C for > 1hr)
     - Grade 4 thrombocytopenia OR Grade 3 thrombocytopenia with bleeding
@@ -383,11 +385,10 @@ class DLTEvaluator:
         bilirubin: Optional[float],
         alk_phos: Optional[float] = None,
     ) -> Optional[HysLawAssessment]:
-        """
-        FDA / Zimmerman Hy's Law criteria:
-        1. ALT or AST >= 3x ULN
-        2. Total Bilirubin >= 2x ULN
-        3. Alkaline Phosphatase < 2x ULN (ruling out cholestatic injury)
+        """Screen laboratory thresholds associated with a potential Hy's Law case.
+
+        This checks ALT/AST, bilirubin, and alkaline phosphatase only. It does
+        not assess competing etiologies, timing, or drug causality.
         """
         if alt is None and ast is None:
             return None
@@ -484,7 +485,11 @@ class DLTEvaluator:
 # ============================================================================
 
 class ClinicalActionEngine:
-    """Provides guideline-directed clinical management recommendations."""
+    """Provides generic management prompts for the selected grading rules.
+
+    These prompts are not a substitute for event-specific guidelines, product
+    labeling, institutional policy, or an active clinical-trial protocol.
+    """
 
     @classmethod
     def get_management_action(
