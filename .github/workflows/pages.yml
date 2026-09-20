@@ -85,17 +85,51 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base="${PAGE_URL%/}/"
-          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
-          test -n "${chrome}"
+          python -m pip install --disable-pip-version-check --quiet selenium
 
-          "${chrome}" \
-            --headless=new \
-            --no-sandbox \
-            --disable-gpu \
-            --disable-dev-shm-usage \
-            --virtual-time-budget=45000 \
-            --dump-dom "${base}?smoke=1" > /tmp/live-dom.html
+          python - <<'PY'
+          import os
+          from selenium import webdriver
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.support.ui import WebDriverWait
 
-          grep -q 'data-smoke="pass"' /tmp/live-dom.html
-          grep -q 'Grade 4' /tmp/live-dom.html
+          page_url = os.environ["PAGE_URL"].rstrip("/") + "/?smoke=1"
+
+          options = Options()
+          options.add_argument("--headless=new")
+          options.add_argument("--no-sandbox")
+          options.add_argument("--disable-gpu")
+          options.add_argument("--disable-dev-shm-usage")
+          options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
+
+          driver = webdriver.Chrome(options=options)
+          try:
+              driver.get(page_url)
+              wait = WebDriverWait(driver, 90, poll_frequency=0.5)
+              wait.until(
+                  lambda d: d.find_element(By.TAG_NAME, "html").get_attribute("data-smoke")
+                  in {"pass", "fail"}
+              )
+
+              state = driver.find_element(By.TAG_NAME, "html").get_attribute("data-smoke")
+              runtime_status = driver.find_element(By.ID, "runtimeStatus").text
+              error_text = driver.find_element(By.ID, "formError").text
+              grade_text = driver.find_element(By.ID, "gradeBadge").text
+              browser_logs = driver.get_log("browser")
+
+              print(f"Smoke state: {state}")
+              print(f"Runtime status: {runtime_status}")
+              print(f"Grade result: {grade_text}")
+              if error_text:
+                  print(f"Page error: {error_text}")
+              for entry in browser_logs:
+                  print(f"Browser log [{entry['level']}]: {entry['message']}")
+
+              if state != "pass":
+                  raise AssertionError("Deployed browser Python smoke test did not pass.")
+              if "Grade 4" not in grade_text:
+                  raise AssertionError(f"Unexpected deployed grading result: {grade_text}")
+          finally:
+              driver.quit()
+          PY
