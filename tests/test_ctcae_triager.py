@@ -69,8 +69,9 @@ class TestCTCAELabGrading(unittest.TestCase):
         self.assertEqual(g0, 0)
 
     def test_anemia_grades(self):
-        g4, _ = CTCAEGradingEngine.grade_hemoglobin(6.0)
-        self.assertEqual(g4, 4)
+        # Laboratory value alone cannot establish CTCAE Grade 4 anemia.
+        g3_low, _ = CTCAEGradingEngine.grade_hemoglobin(6.0)
+        self.assertEqual(g3_low, 3)
         g3, _ = CTCAEGradingEngine.grade_hemoglobin(7.5)
         self.assertEqual(g3, 3)
         # Transfusion indicated qualifies as Grade 3
@@ -164,7 +165,19 @@ class TestDLTEvaluation(unittest.TestCase):
         inp = AdverseEventInput(term="Febrile Neutropenia", lab_value=600.0, temperature_c=38.8, grade=3)
         is_dlt, reasons = DLTEvaluator.assess_event_dlt(inp, grade=3)
         self.assertTrue(is_dlt)
-        self.assertIn("Febrile Neutropenia", reasons[0])
+        self.assertIn("Febrile neutropenia", reasons[0])
+
+    def test_single_38_degree_temperature_does_not_infer_febrile_neutropenia(self):
+        inp = AdverseEventInput(term="Neutropenia", lab_value=700.0, temperature_c=38.0, grade=3)
+        is_dlt, reasons = DLTEvaluator.assess_event_dlt(inp, grade=3)
+        self.assertFalse(any("Febrile neutropenia" in reason for reason in reasons))
+        self.assertFalse(is_dlt)
+
+    def test_single_temperature_above_38_3_can_trigger_febrile_neutropenia_screen(self):
+        inp = AdverseEventInput(term="Neutropenia", lab_value=700.0, temperature_c=38.4, grade=3)
+        is_dlt, reasons = DLTEvaluator.assess_event_dlt(inp, grade=3)
+        self.assertTrue(is_dlt)
+        self.assertTrue(any("Febrile neutropenia" in reason for reason in reasons))
 
     def test_persistent_grade_4_neutropenia_is_dlt(self):
         inp = AdverseEventInput(term="Neutropenia", lab_value=300.0, duration_days=6)
