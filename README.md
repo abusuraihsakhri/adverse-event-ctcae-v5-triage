@@ -101,13 +101,13 @@ For laboratory thresholds that depend on the local reference range, call the rel
 
 The static browser interface is in `web/`. GitHub Pages builds it with the current `ctcae_triager/__init__.py` engine and runs that Python code in a Web Worker through Pyodide. This avoids a separate JavaScript reimplementation of the grading logic.
 
-The first browser load downloads the Pyodide WebAssembly runtime from jsDelivr. Subsequent loads can use the browser cache. A current WebAssembly-capable browser is recommended.
+The Pages build mirrors the pinned Pyodide core into the deployed site, so the browser loads the WebAssembly runtime from the same origin rather than a third-party CDN at runtime. A current WebAssembly-capable browser is recommended.
 
 ## Privacy and data handling
 
 The Python CLI processes local inputs locally.
 
-The browser application does not send adverse-event inputs to this repository or a backend service. Analysis runs in the browser. The page loads the Pyodide runtime from jsDelivr, and it may store only the light/dark theme preference in browser local storage. No patient identifiers are required by the browser form.
+The browser application does not send adverse-event inputs to this repository or a backend service. Analysis runs in the browser against the same-origin Pyodide runtime deployed with the site. It may store only the light/dark theme preference in browser local storage. No patient identifiers are required by the browser form.
 
 The CLI accepts user-selected input and output paths. `safe_resolve_path()` normalizes and validates file paths when requested, but it is **not** a filesystem sandbox and intentionally allows paths outside the repository.
 
