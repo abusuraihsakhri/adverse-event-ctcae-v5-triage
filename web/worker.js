@@ -1,8 +1,8 @@
 "use strict";
 
-const PYODIDE_BASE = "pyodide/";
-importScripts(PYODIDE_BASE + "pyodide.js");
+import { loadPyodide } from "./pyodide/pyodide.mjs";
 
+const PYODIDE_BASE = "pyodide/";
 let pyodide = null;
 
 const initialize = async () => {
