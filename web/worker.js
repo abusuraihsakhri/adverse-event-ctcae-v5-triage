@@ -1,13 +1,13 @@
 "use strict";
 
-importScripts("https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.js");
+const PYODIDE_BASE = "pyodide/";
+importScripts(PYODIDE_BASE + "pyodide.js");
 
 let pyodide = null;
 
 const initialize = async () => {
-  pyodide = await loadPyodide({
-    indexURL: "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/"
-  });
+  const indexURL = new URL(PYODIDE_BASE, self.location.href).href;
+  pyodide = await loadPyodide({ indexURL });
   const response = await fetch("engine.py", { cache: "no-cache" });
   if (!response.ok) throw new Error(`Engine source could not be loaded (HTTP ${response.status}).`);
   const source = await response.text();

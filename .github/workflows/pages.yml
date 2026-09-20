@@ -23,9 +23,26 @@ jobs:
 
       - name: Build static site
         run: |
-          mkdir -p _site
+          set -euo pipefail
+          mkdir -p _site/pyodide
           cp web/index.html web/styles.css web/app.js web/worker.js _site/
           cp ctcae_triager/__init__.py _site/engine.py
+
+          pyodide_base="https://cdn.jsdelivr.net/pyodide/v314.0.7/full"
+          for asset in \
+            pyodide.js \
+            pyodide.mjs \
+            pyodide.asm.mjs \
+            pyodide.asm.wasm \
+            pyodide-lock.json \
+            python_stdlib.zip
+          do
+            curl --fail --silent --show-error --location \
+              "${pyodide_base}/${asset}" \
+              --output "_site/pyodide/${asset}"
+            test -s "_site/pyodide/${asset}"
+          done
+
           touch _site/.nojekyll
 
       - name: Configure Pages
@@ -78,8 +95,15 @@ jobs:
             curl --fail --silent --show-error --location "${base}${asset}" --output "/tmp/${asset}"
             test -s "/tmp/${asset}"
           done
-          grep -q 'cdn.jsdelivr.net/pyodide' /tmp/worker.js
+          grep -q 'PYODIDE_BASE = "pyodide/"' /tmp/worker.js
           grep -q 'class CTCAETriageEngine' /tmp/engine.py
+
+          for asset in pyodide.js pyodide.asm.mjs pyodide.asm.wasm pyodide-lock.json python_stdlib.zip; do
+            curl --fail --silent --show-error --location \
+              "${base}pyodide/${asset}" \
+              --output "/tmp/pyodide-${asset}"
+            test -s "/tmp/pyodide-${asset}"
+          done
 
       - name: Verify browser Python runtime
         shell: bash
