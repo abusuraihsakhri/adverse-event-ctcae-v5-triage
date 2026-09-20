@@ -1,0 +1,1 @@
+from ctcae_triager import AdverseEventInput, CTCAETriageEngine\n\n\ndef test_explicit_grade_zero_is_preserved():\n    event = AdverseEventInput(term="Neutropenia", grade=0, lab_value=450.0)\n    graded = CTCAETriageEngine.evaluate_single_event(event)\n    assert graded.grade == 0\n    assert graded.grade_name == "Grade 0 (Normal / None)"\n    assert graded.is_dlt is False\n
