@@ -177,7 +177,7 @@
     status.classList.remove("ready");
     status.classList.add("error");
     status.lastChild.textContent = " Runtime unavailable";
-    showError("Python runtime failed to load. Check your network connection and reload the page.");
+    showError("Python runtime failed to start. Reload the page or try a current WebAssembly-capable browser.");
     if (smokeMode) document.documentElement.dataset.smoke = "fail";
     setBusy(false);
   });
