@@ -1,5 +1,7 @@
 # CTCAE v5.0 Adverse Event Triage
 
+### [Open the Live Application →](https://abusuraihsakhri.github.io/adverse-event-ctcae-v5-triage/)
+
 Python 3.10+ utilities for selected NCI CTCAE v5.0 grading thresholds, adverse-event screening, protocol-style dose-limiting toxicity (DLT) checks, Hy's Law laboratory signal screening, and explicitly identified immune-related adverse events (irAEs).
 
 The project provides a Python API, command-line interface, batch CSV workflow, and a browser interface that runs the same Python engine client-side with Pyodide.

@@ -43,7 +43,59 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 10
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+  verify:
+    runs-on: ubuntu-latest
+    needs: deploy
+    timeout-minutes: 10
+    env:
+      PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+    steps:
+      - name: Verify deployed files
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${PAGE_URL%/}/"
+
+          ok=false
+          for attempt in {1..12}; do
+            if curl --fail --silent --show-error --location "${base}" --output /tmp/index.html; then
+              ok=true
+              break
+            fi
+            sleep 5
+          done
+          test "${ok}" = true
+
+          grep -q 'id="analyzeButton"' /tmp/index.html
+          for asset in styles.css app.js worker.js engine.py; do
+            curl --fail --silent --show-error --location "${base}${asset}" --output "/tmp/${asset}"
+            test -s "/tmp/${asset}"
+          done
+          grep -q 'cdn.jsdelivr.net/pyodide' /tmp/worker.js
+          grep -q 'class CTCAETriageEngine' /tmp/engine.py
+
+      - name: Verify browser Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${PAGE_URL%/}/"
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          test -n "${chrome}"
+
+          "${chrome}" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --virtual-time-budget=45000 \
+            --dump-dom "${base}?smoke=1" > /tmp/live-dom.html
+
+          grep -q 'data-smoke="pass"' /tmp/live-dom.html
+          grep -q 'Grade 4' /tmp/live-dom.html
