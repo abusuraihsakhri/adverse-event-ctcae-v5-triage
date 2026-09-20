@@ -142,7 +142,7 @@
     }
   };
 
-  const worker = new Worker("worker.js");
+  const worker = new Worker("worker.js", { type: "module" });
 
   worker.addEventListener("message", (event) => {
     const message = event.data || {};
