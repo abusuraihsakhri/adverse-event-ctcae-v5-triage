@@ -11,6 +11,11 @@
   const copyButton = $("copyButton");
   let runtimeReady = false;
   let lastResult = null;
+  const smokeMode = new URLSearchParams(window.location.search).has("smoke");
+
+  if (smokeMode) {
+    document.documentElement.dataset.smoke = "running";
+  }
 
   const optionalNumber = (id) => {
     const raw = $(id).value.trim();
@@ -130,6 +135,11 @@
     emptyState.classList.add("hidden");
     resultContent.classList.remove("hidden");
     copyButton.disabled = false;
+
+    if (smokeMode) {
+      document.documentElement.dataset.smoke =
+        event.term === "Neutropenia" && event.grade === 4 ? "pass" : "fail";
+    }
   };
 
   const worker = new Worker("worker.js");
@@ -142,6 +152,12 @@
       status.classList.remove("error");
       status.lastChild.textContent = " Python ready";
       setBusy(false);
+      if (smokeMode) {
+        $("term").value = "Neutropenia";
+        $("labValue").value = "450";
+        $("duration").value = "6";
+        form.requestSubmit();
+      }
       return;
     }
     if (message.type === "result") {
@@ -152,6 +168,7 @@
     if (message.type === "error") {
       setBusy(false);
       showError(message.message || "The analysis could not be completed.");
+      if (smokeMode) document.documentElement.dataset.smoke = "fail";
     }
   });
 
@@ -161,6 +178,7 @@
     status.classList.add("error");
     status.lastChild.textContent = " Runtime unavailable";
     showError("Python runtime failed to load. Check your network connection and reload the page.");
+    if (smokeMode) document.documentElement.dataset.smoke = "fail";
     setBusy(false);
   });
 
