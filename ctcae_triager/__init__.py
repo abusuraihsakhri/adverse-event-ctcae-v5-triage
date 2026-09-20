@@ -20,7 +20,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 
 # ============================================================================
