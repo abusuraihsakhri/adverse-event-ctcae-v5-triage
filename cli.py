@@ -141,7 +141,7 @@ def run_demo(as_json: bool = False) -> int:
 def run_interactive() -> int:
     """Interactive CLI triage wizard."""
     print("=" * 70)
-    print(" CTCAE v5.0 Adverse Event Triage & Safety Studio")
+    print(" CTCAE v5.0 Adverse Event Triage Utility")
     print("=" * 70)
     print("1. Quick Grade Single Lab / Adverse Event (ANC, Platelets, LFTs, QTc, etc.)")
     print("2. Triage Multi-Event Patient Encounter")
