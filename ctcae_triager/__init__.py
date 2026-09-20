@@ -2,14 +2,13 @@
 """
 CTCAE v5.0 Adverse Event Triage & Dose-Limiting Toxicity (DLT) Engine
 ====================================================================
-Comprehensive, pure standard library clinical trial safety engine implementing:
-- National Cancer Institute (NCI) Common Terminology Criteria for Adverse Events (CTCAE) v5.0
-- Quantitative laboratory threshold grading (Hematologic, Hepatic, Renal, Electrolytes, Cardiac QTc)
-- Qualitative clinical symptom grading (GI, Neurologic, Dermatologic, Pulmonary, CRS, irAEs)
-- Protocol-specified Dose-Limiting Toxicity (DLT) determination (Phase I/II clinical trials)
-- Hy's Law drug-induced liver injury screening
-- ASCO/NCCN Immune-Related Adverse Event (irAE) management and steroid triage
-- Clinical actionability, dose modifications (-25%, -50%, hold, discontinue), and reporting.
+Pure-standard-library screening helpers for selected CTCAE v5.0 laboratory
+thresholds, symptom-severity heuristics, protocol-style DLT checks, Hy's Law
+laboratory signal screening, and irAE-oriented management prompts.
+
+This package is not a complete CTCAE dictionary, protocol implementation, or
+clinical decision system. Protocol-specific definitions, local laboratory
+reference ranges, causality assessment, and clinician judgment remain required.
 """
 
 from __future__ import annotations
@@ -29,10 +28,10 @@ __version__ = "2.0.0"
 # ============================================================================
 
 def safe_resolve_path(file_path: str, must_exist: bool = False) -> Path:
-    """Resolve a file path safely, preventing directory traversal attacks.
+    """Normalize a user-supplied path and optionally validate an input file.
 
-    Returns an absolute, resolved Path. If must_exist is True, raises
-    FileNotFoundError when the target does not exist.
+    This function does not sandbox the caller to the current working directory;
+    command-line users may intentionally read or write paths elsewhere.
     """
     p = Path(file_path).resolve()
     if must_exist and not p.exists():
@@ -98,6 +97,14 @@ class AdverseEventInput:
     def __post_init__(self):
         if not self.term or not self.term.strip():
             raise ValueError("Adverse event term must be a non-empty string.")
+        if self.grade is not None and (
+            isinstance(self.grade, bool)
+            or not isinstance(self.grade, int)
+            or not 0 <= self.grade <= 5
+        ):
+            raise ValueError(f"grade must be an integer from 0 through 5, got {self.grade!r}.")
+        if not isinstance(self.symptoms, list) or not all(isinstance(item, str) for item in self.symptoms):
+            raise ValueError("symptoms must be a list of strings.")
         if self.lab_value is not None and (self.lab_value < 0 or math.isnan(self.lab_value) or math.isinf(self.lab_value)):
             raise ValueError(f"lab_value must be a non-negative finite number, got {self.lab_value}.")
         if self.baseline_value is not None and (self.baseline_value < 0 or math.isnan(self.baseline_value) or math.isinf(self.baseline_value)):
@@ -109,8 +116,8 @@ class AdverseEventInput:
                 self.duration_days = self.resolution_day - self.onset_day + 1
             else:
                 self.duration_days = 1
-        if self.duration_days < 0:
-            raise ValueError(f"duration_days must be non-negative, got {self.duration_days}.")
+        if self.duration_days < 1:
+            raise ValueError(f"duration_days must be at least 1, got {self.duration_days}.")
 
 
 @dataclass
@@ -180,7 +187,8 @@ class PatientSafetyReport:
 
 class CTCAEGradingEngine:
     """
-    Implements exact quantitative and qualitative grading rules from CTCAE v5.0.
+    Implements selected quantitative CTCAE v5.0 thresholds and conservative
+    symptom-description heuristics. It is not a complete CTCAE implementation.
     """
 
     # Reference Standard Upper/Lower Limits of Normal (ULN/LLN)
@@ -272,20 +280,34 @@ class CTCAEGradingEngine:
 
     @classmethod
     def grade_creatinine(cls, value: float, baseline: Optional[float] = None, uln: float = 1.2) -> Tuple[int, str]:
-        """Serum Creatinine (x ULN or x baseline)."""
-        ref_base = baseline if baseline and baseline > 0 else uln
-        if ref_base <= 0:
-            raise ValueError(f"Reference base (baseline or ULN) must be positive, got {ref_base}.")
-        ratio = value / ref_base
-        if ratio > 6.0 or value > 6.0:
-            return 4, f"Creatinine > 6.0x baseline/ULN ({ratio:.1f}x, {value:.2f} mg/dL): Grade 4 (Dialysis/Life-threatening)"
-        elif ratio > 3.0 or value > 3.0:
-            return 3, f"Creatinine > 3.0-6.0x baseline/ULN ({ratio:.1f}x, {value:.2f} mg/dL): Grade 3 (Severe AKI)"
-        elif ratio > 1.5 or value > 1.5:
-            return 2, f"Creatinine > 1.5-3.0x baseline/ULN ({ratio:.1f}x, {value:.2f} mg/dL): Grade 2 (Moderate renal impairment)"
-        elif value > uln or ratio > 1.0:
-            return 1, f"Creatinine > 1.0-1.5x ULN ({value:.2f} mg/dL): Grade 1 (Mild elevation)"
-        return 0, f"Creatinine normal ({value:.2f} mg/dL)"
+        """CTCAE v5.0 creatinine increased grading using ULN and baseline ratios."""
+        if uln <= 0:
+            raise ValueError(f"ULN must be positive, got {uln}.")
+        if baseline is not None and baseline <= 0:
+            raise ValueError(f"baseline must be positive when provided, got {baseline}.")
+
+        uln_ratio = value / uln
+        baseline_ratio = (value / baseline) if baseline is not None else None
+
+        if uln_ratio > 6.0:
+            return 4, f"Creatinine > 6.0x ULN ({uln_ratio:.1f}x ULN, {value:.2f} mg/dL): Grade 4"
+        if (baseline_ratio is not None and baseline_ratio > 3.0) or uln_ratio > 3.0:
+            return 3, (
+                f"Creatinine > 3.0x baseline or > 3.0-6.0x ULN "
+                f"(baseline ratio={baseline_ratio:.1f}x, ULN ratio={uln_ratio:.1f}x): Grade 3"
+                if baseline_ratio is not None
+                else f"Creatinine > 3.0-6.0x ULN ({uln_ratio:.1f}x ULN): Grade 3"
+            )
+        if (baseline_ratio is not None and baseline_ratio > 1.5) or uln_ratio > 1.5:
+            return 2, (
+                f"Creatinine > 1.5-3.0x baseline or > 1.5-3.0x ULN "
+                f"(baseline ratio={baseline_ratio:.1f}x, ULN ratio={uln_ratio:.1f}x): Grade 2"
+                if baseline_ratio is not None
+                else f"Creatinine > 1.5-3.0x ULN ({uln_ratio:.1f}x ULN): Grade 2"
+            )
+        if uln_ratio > 1.0:
+            return 1, f"Creatinine > ULN-1.5x ULN ({uln_ratio:.1f}x ULN, {value:.2f} mg/dL): Grade 1"
+        return 0, f"Creatinine within reference range ({value:.2f} mg/dL)"
 
     @classmethod
     def grade_qtc(cls, qtc_ms: float, baseline_qtc: Optional[float] = None) -> Tuple[int, str]:
@@ -377,23 +399,34 @@ class DLTEvaluator:
 
         trans_ratio = max_transaminase / 40.0
         bili_ratio = bili_val / 1.2
-        alk_ratio = (alk_phos / 120.0) if alk_phos is not None else 1.0
+        alk_ratio = (alk_phos / 120.0) if alk_phos is not None else None
 
-        meets = (trans_ratio >= 3.0) and (bili_ratio >= 2.0) and (alk_ratio < 2.0)
+        signal = (trans_ratio >= 3.0) and (bili_ratio >= 2.0)
+        meets = signal and alk_ratio is not None and alk_ratio < 2.0
+
         if meets:
             rationale = (
-                f"HY'S LAW DILI ALERT: ALT/AST {trans_ratio:.1f}x ULN (>=3x) + "
-                f"Total Bilirubin {bili_ratio:.1f}x ULN (>=2x) with Alk Phos {alk_ratio:.1f}x (<2x). "
-                f"High risk of severe acute drug-induced liver injury / fulminant hepatic failure."
+                f"Hy's Law laboratory screening thresholds are met: ALT/AST {trans_ratio:.1f}x ULN, "
+                f"total bilirubin {bili_ratio:.1f}x ULN, and alkaline phosphatase {alk_ratio:.1f}x ULN. "
+                "This is a screening signal only; alternative causes of liver injury are not assessed here."
+            )
+        elif signal and alk_ratio is None:
+            rationale = (
+                f"Potential Hy's Law laboratory signal: ALT/AST {trans_ratio:.1f}x ULN and total bilirubin "
+                f"{bili_ratio:.1f}x ULN, but alkaline phosphatase is missing, so cholestasis cannot be screened out."
             )
         else:
-            rationale = f"Hy's Law criteria not met (Transaminases: {trans_ratio:.1f}x, Bilirubin: {bili_ratio:.1f}x)."
+            alk_text = "not provided" if alk_ratio is None else f"{alk_ratio:.1f}x ULN"
+            rationale = (
+                f"Hy's Law laboratory screening thresholds are not met "
+                f"(transaminases {trans_ratio:.1f}x ULN, bilirubin {bili_ratio:.1f}x ULN, ALP {alk_text})."
+            )
 
         return HysLawAssessment(
             meets_hys_law=meets,
             alt_ast_elevation_factor=round(trans_ratio, 2),
             bili_elevation_factor=round(bili_ratio, 2),
-            alk_phos_elevation_factor=round(alk_ratio, 2) if alk_phos is not None else None,
+            alk_phos_elevation_factor=round(alk_ratio, 2) if alk_ratio is not None else None,
             rationale=rationale,
         )
 
@@ -466,8 +499,9 @@ class ClinicalActionEngine:
         term_lower = event.term.lower()
         steroid_indicated = False
 
-        # Immune-related Adverse Event (irAE) triage (ASCO/NCCN guidelines)
-        if event.is_immune_mediated or any(k in term_lower for k in ["colitis", "pneumonitis", "hepatitis", "hypophysitis", "rash", "nephritis"]):
+        # irAE management must be explicitly selected by the caller. A term such
+        # as "colitis" or "rash" does not establish immune-mediated causality.
+        if event.is_immune_mediated:
             if grade >= 3:
                 steroid_indicated = True
                 action = ActionTriage.PERMANENT_DISCONTINUATION if grade == 4 else ActionTriage.HOLD_DOSE
@@ -621,7 +655,7 @@ class CTCAETriageEngine:
         for de in dlt_events:
             all_dlt_criteria.extend(de.dlt_reasons)
         if hys_law and hys_law.meets_hys_law:
-            all_dlt_criteria.append("Hy's Law DILI Alert triggered (Grade 3/4 Hepatotoxicity DLT)")
+            all_dlt_criteria.append("Hy's Law laboratory screening signal triggered")
 
         is_dlt = len(all_dlt_criteria) > 0
         affected_organs = sorted(list(set(ge.system_organ_class for ge in graded_events if ge.grade >= 2)))
@@ -662,7 +696,7 @@ class CTCAETriageEngine:
         else:
             narrative_parts.append("No Dose-Limiting Toxicity criteria met.")
         if hys_law and hys_law.meets_hys_law:
-            narrative_parts.append("WARNING: Hy's Law hepatotoxicity criteria satisfied.")
+            narrative_parts.append("Hy's Law laboratory screening thresholds are met; clinical causality review is required.")
         if irae_steroid:
             narrative_parts.append("Immune-related AE steroid therapy is indicated.")
         narrative_parts.append(f"Recommendation: {overall_rec}")
