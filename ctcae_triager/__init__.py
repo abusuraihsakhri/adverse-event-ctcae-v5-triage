@@ -235,16 +235,20 @@ class CTCAEGradingEngine:
 
     @classmethod
     def grade_hemoglobin(cls, value: float, has_transfusion: bool = False) -> Tuple[int, str]:
-        """Hemoglobin (g/dL)."""
-        if value < 6.5:
-            return 4, f"Hemoglobin < 6.5 g/dL ({value:.1f} g/dL): Grade 4 (Life-threatening anemia)"
-        elif value < 8.0 or has_transfusion:
-            return 3, f"Hemoglobin < 8.0 g/dL ({value:.1f} g/dL) or transfusion indicated: Grade 3 (Severe anemia)"
-        elif value < 10.0:
-            return 2, f"Hemoglobin 8.0-9.9 g/dL ({value:.1f} g/dL): Grade 2 (Moderate anemia)"
-        elif value < cls.STANDARD_LIMITS["hemoglobin"]["lln"]:
-            return 1, f"Hemoglobin < LLN-10.0 g/dL ({value:.1f} g/dL): Grade 1 (Mild anemia)"
-        return 0, f"Hemoglobin within normal limits ({value:.1f} g/dL)"
+        """Hemoglobin grading from laboratory value and transfusion indication.
+
+        CTCAE Grade 4 anemia depends on life-threatening clinical consequences
+        requiring urgent intervention and cannot be inferred from hemoglobin
+        concentration alone. Use an explicit event grade when that criterion is
+        clinically established.
+        """
+        if value < 8.0 or has_transfusion:
+            return 3, f"Hemoglobin < 8.0 g/dL ({value:.1f} g/dL) or transfusion indicated: Grade 3"
+        if value < 10.0:
+            return 2, f"Hemoglobin 8.0-9.9 g/dL ({value:.1f} g/dL): Grade 2"
+        if value < cls.STANDARD_LIMITS["hemoglobin"]["lln"]:
+            return 1, f"Hemoglobin < LLN-10.0 g/dL ({value:.1f} g/dL): Grade 1"
+        return 0, f"Hemoglobin within the configured reference range ({value:.1f} g/dL)"
 
     @classmethod
     def grade_liver_enzymes(cls, alt_or_ast: float, uln: float = 40.0, enzyme_name: str = "ALT") -> Tuple[int, str]:
@@ -445,9 +449,15 @@ class DLTEvaluator:
 
         # 2. Febrile Neutropenia
         if "febrile neutropenia" in term_lower or (
-            "neutropen" in term_lower and event.temperature_c is not None and event.temperature_c >= 38.0 and grade >= 3
+            "neutropen" in term_lower
+            and event.temperature_c is not None
+            and event.temperature_c > 38.3
+            and grade >= 3
         ):
-            reasons.append("Febrile Neutropenia (ANC < 1000/mm³ with fever >= 38.0°C).")
+            reasons.append(
+                "Febrile neutropenia screen triggered (neutropenia with a single temperature > 38.3°C, "
+                "or an explicitly supplied febrile-neutropenia diagnosis)."
+            )
 
         # 3. Hematologic DLTs
         if is_heme:
@@ -544,7 +554,7 @@ class ClinicalActionEngine:
         if is_dlt or grade == 3:
             return (
                 ActionTriage.HOLD_DOSE,
-                f"Grade 3 / DLT ({event.term}): Hold study drug until resolution to Grade <= 1 or baseline. Resume with Level -1 dose reduction (-25%).",
+                f"Grade 3 / DLT ({event.term}): Hold study treatment and reassess. Resume, reduce, or discontinue only according to the active protocol, product labeling, and event-specific guidance.",
                 False,
             )
 
@@ -674,7 +684,7 @@ class CTCAETriageEngine:
             overall_rec = "STAT inpatient hospital admission indicated. Permanent study drug discontinuation."
         elif is_dlt or highest_grade == 3:
             overall_action = ActionTriage.HOLD_DOSE.value
-            overall_rec = "Dose-Limiting Toxicity (DLT) confirmed. Hold treatment until resolution; resume with dose reduction (-25%)."
+            overall_rec = "DLT screening criteria are met. Hold treatment and apply the active protocol's event-specific dose-modification rules after clinical reassessment."
         elif highest_grade == 2:
             overall_action = ActionTriage.SUPPORTIVE_CARE.value
             overall_rec = "Grade 2 toxicities present. Optimize outpatient supportive care; monitor weekly."
