@@ -2,36 +2,54 @@ name: CI
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [master, main]
   pull_request:
-    branches: [ master, main ]
+    branches: [master, main]
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
 
-    - name: Install test dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest
+      - name: Install test and build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest build
 
-    - name: Run Test Suite
-      run: |
-        pytest -v
+      - name: Compile sources
+        run: python -m compileall -q cli.py ctcae_engine.py ctcae_triager tests
 
-    - name: Verify CLI Smoke Test
-      run: |
-        python cli.py evaluate --term Neutropenia --lab-value 450 --json
-        python cli.py batch --input sample.csv --output out_smoke.csv
+      - name: Run test suite
+        run: pytest -q
 
+      - name: Validate browser assets
+        run: |
+          node --check web/app.js
+          node --check web/worker.js
+          grep -q 'id="analyzeButton"' web/index.html
+          grep -q 'new Worker("worker.js")' web/app.js
+
+      - name: Build wheel and source distribution
+        run: python -m build
+
+      - name: Verify installed console entry point
+        run: |
+          python -m pip install --force-reinstall dist/*.whl
+          adverse-event-ctcae-v5-triage evaluate --term Neutropenia --lab-value 450 --json
+          adverse-event-ctcae-v5-triage batch --input sample.csv --output out_smoke.csv

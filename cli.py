@@ -141,7 +141,7 @@ def run_demo(as_json: bool = False) -> int:
 def run_interactive() -> int:
     """Interactive CLI triage wizard."""
     print("=" * 70)
-    print(" CTCAE v5.0 Adverse Event Triage & Safety Studio")
+    print(" CTCAE v5.0 Adverse Event Triage Utility")
     print("=" * 70)
     print("1. Quick Grade Single Lab / Adverse Event (ANC, Platelets, LFTs, QTc, etc.)")
     print("2. Triage Multi-Event Patient Encounter")
@@ -187,9 +187,6 @@ def run_interactive() -> int:
             sym = input("    Clinical description / symptoms: ").strip()
             events.append(AdverseEventInput(term=term, lab_value=lab_val, symptoms=[sym] if sym else []))
 
-        if not events:
-            events.append(AdverseEventInput(term="Fatigue", symptoms=["mild"]))
-
         rep = CTCAETriageEngine.triage_patient_encounter(pid, events, cycle)
         print(format_report_text(rep))
 
@@ -202,7 +199,7 @@ def run_interactive() -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ctcae_triage",
-        description="CTCAE v5.0 Adverse Event Triage & Dose-Limiting Toxicity (DLT) Engine",
+        description="Selected CTCAE v5.0 grading and oncology safety screening utilities",
     )
     parser.add_argument("--interactive", "-i", action="store_true", help="Launch interactive studio")
     parser.add_argument("--demo", action="store_true", help="Run benchmark clinical vignettes")
@@ -284,20 +281,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         events = []
         if args.payload:
             try:
-                if args.payload.endswith(".json"):
-                    safe_path = safe_resolve_path(args.payload, must_exist=True)
+                payload = args.payload.strip()
+                if payload.startswith("[") or payload.startswith("{"):
+                    data = json.loads(payload)
+                else:
+                    safe_path = safe_resolve_path(payload, must_exist=True)
                     with open(safe_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                else:
-                    data = json.loads(args.payload)
-                if isinstance(data, list):
-                    for d in data:
-                        events.append(AdverseEventInput(**d))
-            except Exception as e:
+
+                if isinstance(data, dict):
+                    data = data.get("events")
+                if not isinstance(data, list):
+                    raise ValueError("Payload must be a JSON event array or an object containing an 'events' array.")
+                for index, item in enumerate(data, start=1):
+                    if not isinstance(item, dict):
+                        raise ValueError(f"Event {index} must be a JSON object.")
+                    events.append(AdverseEventInput(**item))
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as e:
                 print(f"Error parsing payload: {e}", file=sys.stderr)
                 return 1
-        if not events:
-            events.append(AdverseEventInput(term="Fatigue", symptoms=["Grade 1 mild"]))
 
         rep = CTCAETriageEngine.triage_patient_encounter(
             patient_id=args.patient_id,
@@ -322,21 +324,29 @@ def main(argv: Optional[List[str]] = None) -> int:
                 reader = csv.DictReader(f_in)
                 rows = list(reader)
             out_rows = []
-            for r in rows:
-                val = float(r["lab_value"]) if r.get("lab_value") else None
-                dur = int(r["duration_days"]) if r.get("duration_days") else 1
-                imm = r.get("is_immune_mediated", "false").lower() in ("true", "1", "yes")
-                inp = AdverseEventInput(
-                    term=r.get("term", "Adverse Event"),
-                    system_organ_class=r.get("system_organ_class", "General disorders"),
-                    lab_value=val,
-                    symptoms=[r.get("symptoms", "")],
-                    duration_days=dur,
-                    is_immune_mediated=imm,
-                )
-                graded = CTCAETriageEngine.evaluate_single_event(inp)
+            for row_number, r in enumerate(rows, start=2):
+                try:
+                    term = (r.get("term") or "").strip()
+                    if not term:
+                        raise ValueError("term is required")
+                    val = float(r["lab_value"]) if r.get("lab_value") else None
+                    dur = int(r["duration_days"]) if r.get("duration_days") else 1
+                    imm = (r.get("is_immune_mediated") or "false").strip().lower() in ("true", "1", "yes")
+                    symptom = (r.get("symptoms") or "").strip()
+                    inp = AdverseEventInput(
+                        term=term,
+                        system_organ_class=(r.get("system_organ_class") or "General disorders").strip(),
+                        lab_value=val,
+                        symptoms=[symptom] if symptom else [],
+                        duration_days=dur,
+                        is_immune_mediated=imm,
+                    )
+                    graded = CTCAETriageEngine.evaluate_single_event(inp)
+                except (TypeError, ValueError) as e:
+                    raise ValueError(f"CSV row {row_number}: {e}") from e
+
                 out_rows.append({
-                    "patient_id": r.get("patient_id", "PT-UNKNOWN"),
+                    "patient_id": r.get("patient_id") or "PT-UNKNOWN",
                     "term": graded.term,
                     "grade": graded.grade,
                     "grade_name": graded.grade_name,
@@ -344,12 +354,21 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "action_triage": graded.action_triage,
                     "management_guidance": graded.management_guidance,
                 })
+
+            fieldnames = [
+                "patient_id",
+                "term",
+                "grade",
+                "grade_name",
+                "is_dlt",
+                "action_triage",
+                "management_guidance",
+            ]
             with open(safe_out, "w", newline="", encoding="utf-8") as f_out:
-                if out_rows:
-                    writer = csv.DictWriter(f_out, fieldnames=list(out_rows[0].keys()))
-                    writer.writeheader()
-                    writer.writerows(out_rows)
-            print(f"Successfully triaged {len(out_rows)} events to {args.output}")
+                writer = csv.DictWriter(f_out, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(out_rows)
+            print(f"Successfully triaged {len(out_rows)} events to {safe_out}")
             return 0
         except Exception as e:
             print(f"Batch error: {e}", file=sys.stderr)

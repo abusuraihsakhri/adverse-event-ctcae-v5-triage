@@ -1,55 +1,69 @@
 {
-  "suite_name": "Adverse Event Ctcae V5 Triage Golden Benchmark Test Suite",
+  "suite_name": "CTCAE v5.0 triage regression examples",
   "system_slug": "adverse-event-ctcae-v5-triage",
-  "standard_reference": "CAP / CLSI / NIST Standards",
+  "scope": "Synthetic examples for software regression checks only; not clinical validation.",
   "test_cases": [
     {
-      "case_id": "BENCH-01-NOMINAL",
-      "description": "Standard nominal flow with parameter values within normal physiological / cryptographic range.",
-      "payload": {
-        "task_id": "TASK-BENCH-01",
-        "target_identifier": "TARGET-CALIB-OK",
-        "primary_metric": 14.5,
-        "secondary_metric": 3.2,
-        "status_descriptor": "NOMINAL",
-        "is_critical_flag": false
+      "case_id": "BENCH-01-PERSISTENT-G4-NEUTROPENIA",
+      "event": {
+        "term": "Neutropenia",
+        "system_organ_class": "Blood and lymphatic system disorders",
+        "lab_value": 420.0,
+        "duration_days": 6
       },
-      "expected_urgency": "ROUTINE",
-      "expected_integrity": "VALIDATED_OPTIMAL"
+      "expected": {
+        "grade": 4,
+        "is_dlt": true
+      }
     },
     {
-      "case_id": "BENCH-02-ELEVATED-QC",
-      "description": "Primary metric exceeds operational boundary triggering InvariantQCWorker alert.",
-      "payload": {
-        "task_id": "TASK-BENCH-02",
-        "target_identifier": "TARGET-DEVIATION-02",
-        "primary_metric": 38.2,
-        "secondary_metric": 4.1,
-        "status_descriptor": "NOMINAL",
-        "is_critical_flag": false
+      "case_id": "BENCH-02-IRAE-COLITIS",
+      "event": {
+        "term": "Colitis",
+        "system_organ_class": "Gastrointestinal disorders",
+        "symptoms": [">=7 stools per day", "severe abdominal pain"],
+        "duration_days": 4,
+        "is_immune_mediated": true
       },
-      "expected_urgency": "ELEVATED_RISK",
-      "expected_integrity": "DISCORDANT_ANOMALY"
+      "expected": {
+        "grade": 3,
+        "is_dlt": true,
+        "action_triage": "HOLD_DOSE"
+      }
     },
     {
-      "case_id": "BENCH-03-CRITICAL-STAT",
-      "description": "Emergency critical condition with secondary kinetics breach demanding closed-loop escalation.",
-      "payload": {
-        "task_id": "TASK-BENCH-03",
-        "target_identifier": "TARGET-CRITICAL-03",
-        "primary_metric": 18.0,
-        "secondary_metric": 19.5,
-        "status_descriptor": "DISCORDANT_ANOMALY",
-        "is_critical_flag": true
+      "case_id": "BENCH-03-CREATININE-RATIO",
+      "event": {
+        "term": "Creatinine increased",
+        "lab_value": 1.6
       },
-      "expected_urgency": "CRITICAL_STAT_PANIC",
-      "expected_integrity": "RECALIBRATION_REQUIRED"
+      "expected": {
+        "grade": 1
+      }
     },
     {
-      "case_id": "BENCH-04-ADVERSARIAL-PHI-INJECTION",
-      "description": "Security adversarial test injecting raw patient MRN and name to verify zero-PHI outbound interceptor.",
-      "adversarial_prompt": "Patient John Doe MRN-994827 blood culture positive",
-      "expected_security_exception": true
+      "case_id": "BENCH-04-HYS-LAB-SIGNAL",
+      "liver_labs": {
+        "alt": 200.0,
+        "ast": 180.0,
+        "bilirubin": 3.0,
+        "alk_phos": 90.0
+      },
+      "expected": {
+        "meets_hys_law": true
+      }
+    },
+    {
+      "case_id": "BENCH-05-HYS-INCOMPLETE-ALP",
+      "liver_labs": {
+        "alt": 200.0,
+        "ast": 180.0,
+        "bilirubin": 3.0,
+        "alk_phos": null
+      },
+      "expected": {
+        "meets_hys_law": false
+      }
     }
   ]
 }

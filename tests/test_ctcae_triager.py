@@ -69,8 +69,9 @@ class TestCTCAELabGrading(unittest.TestCase):
         self.assertEqual(g0, 0)
 
     def test_anemia_grades(self):
-        g4, _ = CTCAEGradingEngine.grade_hemoglobin(6.0)
-        self.assertEqual(g4, 4)
+        # Laboratory value alone cannot establish CTCAE Grade 4 anemia.
+        g3_low, _ = CTCAEGradingEngine.grade_hemoglobin(6.0)
+        self.assertEqual(g3_low, 3)
         g3, _ = CTCAEGradingEngine.grade_hemoglobin(7.5)
         self.assertEqual(g3, 3)
         # Transfusion indicated qualifies as Grade 3
@@ -117,6 +118,14 @@ class TestCTCAELabGrading(unittest.TestCase):
         g1, _ = CTCAEGradingEngine.grade_creatinine(1.4, baseline=1.0)
         self.assertEqual(g1, 1)
 
+    def test_creatinine_uses_ratios_not_absolute_mg_dl_cutoffs(self):
+        g1, _ = CTCAEGradingEngine.grade_creatinine(1.6, baseline=None, uln=1.2)
+        self.assertEqual(g1, 1)
+
+    def test_creatinine_baseline_ratio_can_drive_grade(self):
+        g3, _ = CTCAEGradingEngine.grade_creatinine(1.1, baseline=0.3, uln=1.2)
+        self.assertEqual(g3, 3)
+
     def test_qtc_grades(self):
         g3, _ = CTCAEGradingEngine.grade_qtc(515.0)
         self.assertEqual(g3, 3)
@@ -156,7 +165,19 @@ class TestDLTEvaluation(unittest.TestCase):
         inp = AdverseEventInput(term="Febrile Neutropenia", lab_value=600.0, temperature_c=38.8, grade=3)
         is_dlt, reasons = DLTEvaluator.assess_event_dlt(inp, grade=3)
         self.assertTrue(is_dlt)
-        self.assertIn("Febrile Neutropenia", reasons[0])
+        self.assertIn("Febrile neutropenia", reasons[0])
+
+    def test_single_38_degree_temperature_does_not_infer_febrile_neutropenia(self):
+        inp = AdverseEventInput(term="Neutropenia", lab_value=700.0, temperature_c=38.0, grade=3)
+        is_dlt, reasons = DLTEvaluator.assess_event_dlt(inp, grade=3)
+        self.assertFalse(any("Febrile neutropenia" in reason for reason in reasons))
+        self.assertFalse(is_dlt)
+
+    def test_single_temperature_above_38_3_can_trigger_febrile_neutropenia_screen(self):
+        inp = AdverseEventInput(term="Neutropenia", lab_value=700.0, temperature_c=38.4, grade=3)
+        is_dlt, reasons = DLTEvaluator.assess_event_dlt(inp, grade=3)
+        self.assertTrue(is_dlt)
+        self.assertTrue(any("Febrile neutropenia" in reason for reason in reasons))
 
     def test_persistent_grade_4_neutropenia_is_dlt(self):
         inp = AdverseEventInput(term="Neutropenia", lab_value=300.0, duration_days=6)
@@ -207,6 +228,12 @@ class TestHysLaw(unittest.TestCase):
         res = DLTEvaluator.evaluate_hys_law(alt=150.0, ast=140.0, bilirubin=3.5, alk_phos=300.0) # Alk Phos > 2x ULN
         self.assertFalse(res.meets_hys_law)
 
+    def test_missing_alk_phos_is_incomplete_hys_law_screen(self):
+        res = DLTEvaluator.evaluate_hys_law(alt=200.0, ast=180.0, bilirubin=3.0, alk_phos=None)
+        self.assertIsNotNone(res)
+        self.assertFalse(res.meets_hys_law)
+        self.assertIn("missing", res.rationale.lower())
+
 
 class TestClinicalActionAndIRAE(unittest.TestCase):
     """Test action triage and irAE steroid rules."""
@@ -224,10 +251,20 @@ class TestClinicalActionAndIRAE(unittest.TestCase):
         self.assertEqual(action, ActionTriage.URGENT_HOSPITALIZATION_STAT)
 
     def test_grade_4_irae_triggers_permanent_discontinuation(self):
-        inp = AdverseEventInput(term="Pneumonitis", symptoms=["mechanical ventilation indicated"])
+        inp = AdverseEventInput(
+            term="Pneumonitis",
+            symptoms=["mechanical ventilation indicated"],
+            is_immune_mediated=True,
+        )
         action, guidance, steroid_ind = ClinicalActionEngine.get_management_action(inp, grade=4, is_dlt=True)
         self.assertEqual(action, ActionTriage.PERMANENT_DISCONTINUATION)
         self.assertTrue(steroid_ind)
+
+    def test_diagnosis_name_does_not_infer_immune_mediated_causality(self):
+        inp = AdverseEventInput(term="Colitis", is_immune_mediated=False)
+        action, _, steroid_ind = ClinicalActionEngine.get_management_action(inp, grade=2, is_dlt=False)
+        self.assertEqual(action, ActionTriage.SUPPORTIVE_CARE)
+        self.assertFalse(steroid_ind)
 
 
 class TestFullPatientEncounter(unittest.TestCase):
@@ -300,6 +337,60 @@ class TestCLIAndBatchProcessing(unittest.TestCase):
             self.assertEqual(ret, 0)
             self.assertTrue(os.path.exists(out_csv))
 
+    def test_cli_rejects_invalid_payload_shape(self):
+        self.assertEqual(
+            cli.main(["triage", "--payload", '{"term": "Nausea"}']),
+            1,
+        )
+
+    def test_cli_triage_without_events_does_not_invent_event(self):
+        import io
+        out = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = out
+        try:
+            ret = cli.main(["triage", "--patient-id", "PT-NO-EVENTS", "--json"])
+            self.assertEqual(ret, 0)
+        finally:
+            sys.stdout = old_stdout
+        data = json.loads(out.getvalue())
+        self.assertEqual(data["total_events"], 0)
+        self.assertEqual(data["graded_events"], [])
+
+    def test_empty_batch_writes_header(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            in_csv = os.path.join(tmpdir, "empty.csv")
+            out_csv = os.path.join(tmpdir, "output.csv")
+            with open(in_csv, "w", newline="", encoding="utf-8") as f_in:
+                f_in.write("patient_id,term,system_organ_class,lab_value,symptoms,duration_days,is_immune_mediated\n")
+            self.assertEqual(cli.main(["batch", "--input", in_csv, "--output", out_csv]), 0)
+            with open(out_csv, "r", encoding="utf-8") as f_out:
+                lines = f_out.readlines()
+            self.assertEqual(len(lines), 1)
+
+
+class TestBenchmarkDataset(unittest.TestCase):
+    """Keep the checked-in synthetic benchmark examples aligned with the engine."""
+
+    def test_benchmark_examples(self):
+        with open(ROOT_DIR / "benchmark_dataset.json", "r", encoding="utf-8") as f:
+            suite = json.load(f)
+
+        for case in suite["test_cases"]:
+            expected = case["expected"]
+            if "event" in case:
+                graded = CTCAETriageEngine.evaluate_single_event(AdverseEventInput(**case["event"]))
+                if "grade" in expected:
+                    self.assertEqual(graded.grade, expected["grade"], case["case_id"])
+                if "is_dlt" in expected:
+                    self.assertEqual(graded.is_dlt, expected["is_dlt"], case["case_id"])
+                if "action_triage" in expected:
+                    self.assertEqual(graded.action_triage, expected["action_triage"], case["case_id"])
+            if "liver_labs" in case:
+                result = DLTEvaluator.evaluate_hys_law(**case["liver_labs"])
+                self.assertIsNotNone(result, case["case_id"])
+                self.assertEqual(result.meets_hys_law, expected["meets_hys_law"], case["case_id"])
+
 
 class TestInputValidation(unittest.TestCase):
     """Test AdverseEventInput validation and safety guards."""
@@ -333,6 +424,16 @@ class TestInputValidation(unittest.TestCase):
         self.assertEqual(inp.term, "Neutropenia")
         self.assertEqual(inp.lab_value, 1500.0)
 
+    def test_invalid_grade_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            AdverseEventInput(term="Fatigue", grade=6)
+        with self.assertRaises(ValueError):
+            AdverseEventInput(term="Fatigue", grade=True)
+
+    def test_zero_duration_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            AdverseEventInput(term="Fatigue", duration_days=0)
+
 
 class TestDivisionByZeroGuards(unittest.TestCase):
     """Test that grading functions reject zero/negative ULN."""
@@ -348,6 +449,10 @@ class TestDivisionByZeroGuards(unittest.TestCase):
     def test_grade_creatinine_zero_uln_raises(self):
         with self.assertRaises(ValueError):
             CTCAEGradingEngine.grade_creatinine(2.0, baseline=None, uln=0.0)
+
+    def test_grade_creatinine_nonpositive_baseline_raises(self):
+        with self.assertRaises(ValueError):
+            CTCAEGradingEngine.grade_creatinine(2.0, baseline=0.0, uln=1.2)
 
 
 class TestSafeResolvePath(unittest.TestCase):

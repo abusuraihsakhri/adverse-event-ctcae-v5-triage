@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Browser interface for selected CTCAE v5.0 grading and oncology safety screening utilities.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' https://cdn.jsdelivr.net; worker-src 'self' blob:; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>CTCAE v5.0 Triage</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">CT</div>
+      <div>
+        <h1>CTCAE v5.0 Triage</h1>
+        <p>Selected grading & safety-screening utilities</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span id="runtimeStatus" class="runtime-status" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        Loading Python…
+      </span>
+      <button id="themeToggle" class="icon-button" type="button" aria-label="Switch to dark theme" title="Toggle theme">
+        <svg class="theme-icon sun" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V2m0 20v-2M4 12H2m20 0h-2M5.64 5.64 4.22 4.22m15.56 15.56-1.42-1.42M18.36 5.64l1.42-1.42M4.22 19.78l1.42-1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"/></svg>
+        <svg class="theme-icon moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section class="panel input-panel" aria-labelledby="eventHeading">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Event input</p>
+          <h2 id="eventHeading">Grade an adverse event</h2>
+        </div>
+        <button id="resetButton" class="text-button" type="button">Reset</button>
+      </div>
+
+      <form id="eventForm" novalidate>
+        <div class="form-grid">
+          <label class="field field-wide">
+            <span>Adverse event</span>
+            <select id="term" name="term">
+              <option>Neutropenia</option>
+              <option>Thrombocytopenia</option>
+              <option>Anemia</option>
+              <option>ALT increased</option>
+              <option>AST increased</option>
+              <option>Blood bilirubin increased</option>
+              <option>Creatinine increased</option>
+              <option>QTc prolonged</option>
+              <option>Fatigue</option>
+              <option>Diarrhea</option>
+              <option>Colitis</option>
+              <option>Pneumonitis</option>
+              <option>Rash</option>
+              <option>Nausea</option>
+              <option>Vomiting</option>
+              <option value="Other">Other…</option>
+            </select>
+          </label>
+
+          <label id="customTermField" class="field field-wide hidden">
+            <span>Custom term</span>
+            <input id="customTerm" name="customTerm" type="text" maxlength="120" autocomplete="off" placeholder="Enter the CTCAE term">
+          </label>
+
+          <label class="field">
+            <span>Lab value <small>optional</small></span>
+            <input id="labValue" name="labValue" type="number" step="any" min="0" inputmode="decimal" placeholder="e.g. 450">
+          </label>
+
+          <label class="field">
+            <span>Baseline <small>optional</small></span>
+            <input id="baseline" name="baseline" type="number" step="any" min="0" inputmode="decimal" placeholder="e.g. 1.0">
+          </label>
+
+          <label class="field">
+            <span>Duration <small>days</small></span>
+            <input id="duration" name="duration" type="number" min="1" step="1" value="1" inputmode="numeric">
+          </label>
+
+          <label class="field">
+            <span>Temperature <small>°C</small></span>
+            <input id="temperature" name="temperature" type="number" min="30" max="45" step="0.1" inputmode="decimal" placeholder="optional">
+          </label>
+
+          <label class="field field-wide">
+            <span>Clinical description <small>optional</small></span>
+            <textarea id="symptoms" name="symptoms" rows="2" maxlength="500" placeholder="Severity, ADL limitation, intervention or hospitalization details"></textarea>
+          </label>
+        </div>
+
+        <div class="switch-row">
+          <label class="check">
+            <input id="immuneMediated" type="checkbox">
+            <span>Explicitly immune-mediated</span>
+          </label>
+          <label class="check">
+            <input id="bleeding" type="checkbox">
+            <span>Clinically significant bleeding</span>
+          </label>
+        </div>
+
+        <details class="liver-details">
+          <summary>
+            <span>Liver laboratory signal screen</span>
+            <small>Optional Hy’s Law laboratory thresholds</small>
+          </summary>
+          <div class="form-grid liver-grid">
+            <label class="field"><span>ALT <small>U/L</small></span><input id="alt" type="number" min="0" step="any" inputmode="decimal"></label>
+            <label class="field"><span>AST <small>U/L</small></span><input id="ast" type="number" min="0" step="any" inputmode="decimal"></label>
+            <label class="field"><span>Bilirubin <small>mg/dL</small></span><input id="bilirubin" type="number" min="0" step="any" inputmode="decimal"></label>
+            <label class="field"><span>ALP <small>U/L</small></span><input id="alkPhos" type="number" min="0" step="any" inputmode="decimal"></label>
+          </div>
+        </details>
+
+        <div id="formError" class="form-error hidden" role="alert"></div>
+
+        <button id="analyzeButton" class="primary-button" type="submit" disabled>
+          <span>Analyze event</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </form>
+    </section>
+
+    <section class="panel result-panel" aria-labelledby="resultHeading">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Result</p>
+          <h2 id="resultHeading">Screening summary</h2>
+        </div>
+        <button id="copyButton" class="text-button" type="button" disabled>Copy JSON</button>
+      </div>
+
+      <div id="emptyState" class="empty-state">
+        <div class="empty-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 19.5V4.8c0-.44.36-.8.8-.8h14.4c.44 0 .8.36.8.8v14.4c0 .44-.36.8-.8.8H4.5L4 19.5ZM8 9h8M8 13h5"/></svg>
+        </div>
+        <h3>Ready when Python is loaded</h3>
+        <p>Enter an event, then use <strong>Analyze event</strong>. Processing stays in this browser tab.</p>
+      </div>
+
+      <div id="resultContent" class="result-content hidden" aria-live="polite">
+        <div class="result-topline">
+          <div>
+            <p id="resultTerm" class="result-term">—</p>
+            <div class="badge-row">
+              <span id="gradeBadge" class="badge">Grade —</span>
+              <span id="dltBadge" class="badge neutral">DLT —</span>
+            </div>
+          </div>
+          <div class="action-card">
+            <span>Action category</span>
+            <strong id="actionText">—</strong>
+          </div>
+        </div>
+
+        <dl class="result-list">
+          <div>
+            <dt>Grading rationale</dt>
+            <dd id="rationaleText">—</dd>
+          </div>
+          <div>
+            <dt>Management prompt</dt>
+            <dd id="managementText">—</dd>
+          </div>
+          <div id="dltReasonsRow" class="hidden">
+            <dt>DLT rule(s) triggered</dt>
+            <dd id="dltReasonsText">—</dd>
+          </div>
+        </dl>
+
+        <div id="hysCard" class="signal-card hidden">
+          <div>
+            <span class="signal-label">Liver laboratory signal</span>
+            <strong id="hysStatus">—</strong>
+          </div>
+          <p id="hysRationale">—</p>
+        </div>
+      </div>
+
+      <aside class="safety-note">
+        <strong>Research / educational use.</strong>
+        <span>This tool covers selected CTCAE v5.0 rules and heuristics only. It is not a complete CTCAE dictionary, trial protocol, diagnostic system, or substitute for clinician review. Confirm grading against the official CTCAE and the applicable protocol.</span>
+      </aside>
+
+      <div class="privacy-note">
+        <span>No patient data is transmitted or stored by this page. Theme preference may be stored locally.</span>
+        <a href="https://dctd.cancer.gov/research/ctep-trials/for-sites/adverse-events" target="_blank" rel="noopener noreferrer">NCI CTCAE resources</a>
+      </div>
+    </section>
+  </main>
+
+  <noscript>This application requires JavaScript and WebAssembly-enabled browser support.</noscript>
+  <script src="app.js" defer></script>
+</body>
+</html>
