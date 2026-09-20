@@ -38,6 +38,13 @@ jobs:
       - name: Run test suite
         run: pytest -q
 
+      - name: Validate browser assets
+        run: |
+          node --check web/app.js
+          node --check web/worker.js
+          grep -q 'id="analyzeButton"' web/index.html
+          grep -q 'worker.js' web/index.html
+
       - name: Build wheel and source distribution
         run: python -m build
 
