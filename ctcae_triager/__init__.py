@@ -587,7 +587,7 @@ class CTCAETriageEngine:
         rationale = ""
 
         # 1. Determine grade if not explicitly supplied
-        if grade is None or grade == 0:
+        if grade is None:
             if "neutropen" in term_lower and inp.lab_value is not None:
                 grade, rationale = CTCAEGradingEngine.grade_anc(inp.lab_value)
             elif "thrombocytopen" in term_lower and inp.lab_value is not None:
