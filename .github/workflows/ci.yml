@@ -43,7 +43,7 @@ jobs:
           node --check web/app.js
           node --check web/worker.js
           grep -q 'id="analyzeButton"' web/index.html
-          grep -q 'new Worker("worker.js")' web/app.js
+          grep -q 'new Worker("worker.js", { type: "module" })' web/app.js
 
       - name: Build wheel and source distribution
         run: python -m build
