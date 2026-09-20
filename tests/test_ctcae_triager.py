@@ -356,6 +356,29 @@ class TestCLIAndBatchProcessing(unittest.TestCase):
             self.assertEqual(len(lines), 1)
 
 
+class TestBenchmarkDataset(unittest.TestCase):
+    """Keep the checked-in synthetic benchmark examples aligned with the engine."""
+
+    def test_benchmark_examples(self):
+        with open(ROOT_DIR / "benchmark_dataset.json", "r", encoding="utf-8") as f:
+            suite = json.load(f)
+
+        for case in suite["test_cases"]:
+            expected = case["expected"]
+            if "event" in case:
+                graded = CTCAETriageEngine.evaluate_single_event(AdverseEventInput(**case["event"]))
+                if "grade" in expected:
+                    self.assertEqual(graded.grade, expected["grade"], case["case_id"])
+                if "is_dlt" in expected:
+                    self.assertEqual(graded.is_dlt, expected["is_dlt"], case["case_id"])
+                if "action_triage" in expected:
+                    self.assertEqual(graded.action_triage, expected["action_triage"], case["case_id"])
+            if "liver_labs" in case:
+                result = DLTEvaluator.evaluate_hys_law(**case["liver_labs"])
+                self.assertIsNotNone(result, case["case_id"])
+                self.assertEqual(result.meets_hys_law, expected["meets_hys_law"], case["case_id"])
+
+
 class TestInputValidation(unittest.TestCase):
     """Test AdverseEventInput validation and safety guards."""
 
